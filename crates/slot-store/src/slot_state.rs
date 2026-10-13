@@ -228,7 +228,11 @@ fn parse(text: &str) -> Option<SlotState> {
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             _ => {
                 if let Some((profile, control, key)) = bind_line(key, value) {
-                    controls.controls_mut(profile).bind(control, key);
+                    let bindings = controls.controls_mut(profile);
+                    match key {
+                        Some(key) => bindings.bind(control, key),
+                        None => bindings.unbind(control),
+                    }
                 }
             }
         }

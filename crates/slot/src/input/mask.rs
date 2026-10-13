@@ -38,7 +38,11 @@ impl Pad {
             .filter(|(btn, _)| self.holds(*btn))
             .fold(0, |m, (_, bit)| m | bit);
         for &control in self.profile.controls() {
-            if self.holds(key_btn(self.bindings.key(control))) {
+            if self
+                .bindings
+                .key(control)
+                .is_some_and(|k| self.holds(key_btn(k)))
+            {
                 mask |= control_bit(control);
             }
         }

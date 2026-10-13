@@ -570,7 +570,7 @@ struct UiFaces {
     quick_legend: [UndoFace; 3],
     controls_labels: Vec<UndoFace>,
     controls_keys: Vec<[UndoFace; 2]>,
-    controls_legend: [UndoFace; 4],
+    controls_legend: [UndoFace; 5],
     gb_controls: UndoFace,
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,

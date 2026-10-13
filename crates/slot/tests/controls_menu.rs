@@ -110,10 +110,10 @@ fn a_listens_and_the_next_key_is_bound_and_saved() {
     assert!(at(&a).2, "letting go of the A that started it bound A");
     press(&mut a, Btn::R1);
     assert!(!at(&a).2, "binding did not stop the listening");
-    assert_eq!(a.controls(Profile::Gba).key(Control::A), Key::R1);
+    assert_eq!(a.controls(Profile::Gba).key(Control::A), Some(Key::R1));
     assert_eq!(
         read_slot_state(d.path()).controls_gba.key(Control::A),
-        Key::R1,
+        Some(Key::R1),
         "the binding never reached the card"
     );
 }
@@ -125,10 +125,10 @@ fn a_and_b_can_be_bound_while_listening() {
     down_to(&mut a, 1);
     press(&mut a, Btn::A);
     press(&mut a, Btn::A);
-    assert_eq!(a.controls(Profile::Gba).key(Control::B), Key::A);
+    assert_eq!(a.controls(Profile::Gba).key(Control::B), Some(Key::A));
     press(&mut a, Btn::A);
     press(&mut a, Btn::B);
-    assert_eq!(a.controls(Profile::Gba).key(Control::B), Key::B);
+    assert_eq!(a.controls(Profile::Gba).key(Control::B), Some(Key::B));
     assert!(
         a.controls_menu().is_some(),
         "B left the page while listening"
@@ -194,7 +194,7 @@ fn the_gb_profile_has_no_shoulder_rows_and_leaves_gba_alone() {
     down_to(&mut a, 0);
     press(&mut a, Btn::A);
     press(&mut a, Btn::Y);
-    assert_eq!(a.controls(Profile::Gb).key(Control::A), Key::Y);
+    assert_eq!(a.controls(Profile::Gb).key(Control::A), Some(Key::Y));
     assert_eq!(*a.controls(Profile::Gba), Bindings::default());
 }
 
@@ -238,4 +238,54 @@ fn a_shoulder_bound_in_the_gb_profile_goes_to_the_game() {
     s.feed([RawEvent::Up(Btn::R1)], 220);
     s.feed([RawEvent::Down(Btn::L1)], 300);
     assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
+}
+
+#[test]
+fn x_clears_the_row_under_the_bar_and_saves_it() {
+    let (d, mut a) = on_gba_shelf();
+    open_controls(&mut a);
+    down_to(&mut a, 6);
+    press(&mut a, Btn::X);
+    assert!(!at(&a).2, "X started listening");
+    assert_eq!(a.controls(Profile::Gba).key(Control::TurboA), None);
+    assert_eq!(a.controls(Profile::Gba).key(Control::TurboB), Some(Key::Y));
+    assert_eq!(
+        read_slot_state(d.path()).controls_gba.key(Control::TurboA),
+        None,
+        "the cleared row never reached the card"
+    );
+}
+
+#[test]
+fn x_binds_x_while_listening_rather_than_clearing() {
+    let (_d, mut a) = on_gba_shelf();
+    open_controls(&mut a);
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::X);
+    assert_eq!(a.controls(Profile::Gba).key(Control::A), Some(Key::X));
+}
+
+#[test]
+fn x_on_the_reset_row_changes_nothing() {
+    let (_d, mut a) = on_gba_shelf();
+    open_controls(&mut a);
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::X);
+    assert_eq!(*a.controls(Profile::Gba), Bindings::default());
+    assert_eq!(at(&a).1, 8);
+}
+
+#[test]
+fn a_cleared_row_can_be_bound_again_and_reset_brings_it_back() {
+    let (_d, mut a) = on_gba_shelf();
+    open_controls(&mut a);
+    press(&mut a, Btn::X);
+    assert_eq!(a.controls(Profile::Gba).key(Control::A), None);
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::B);
+    assert_eq!(a.controls(Profile::Gba).key(Control::A), Some(Key::B));
+    press(&mut a, Btn::X);
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::A);
+    assert_eq!(a.controls(Profile::Gba).key(Control::A), Some(Key::A));
 }

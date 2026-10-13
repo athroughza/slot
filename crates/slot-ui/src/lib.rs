@@ -46,6 +46,7 @@ pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPic
 pub use controls_menu::{
     controls_first, controls_key_faces, controls_label_faces, controls_legend_faces, controls_rows,
     ControlsFaces, ControlsMenu, CONTROLS_SHOWN, GB_CONTROLS_LABEL, LISTENING_TEXT, RESET_LABEL,
+    UNBOUND_TEXT,
 };
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use footer::{draw_footer, Printed};

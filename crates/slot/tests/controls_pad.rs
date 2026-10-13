@@ -105,3 +105,12 @@ fn letting_go_of_a_shared_key_releases_every_control_on_it() {
     p.apply(Action::GbaUp(Btn::A));
     assert_eq!(p.mask().0, 0);
 }
+
+#[test]
+fn an_unbound_control_is_never_pressed() {
+    let mut b = Bindings::default();
+    b.unbind(Control::TurboA);
+    let mut p = pad(Profile::Gba, b);
+    assert_eq!(held(&mut p, &[Btn::X]), 0, "X still fired turbo A");
+    assert_eq!(held(&mut p, &[Btn::Y]), ButtonMask::Y);
+}

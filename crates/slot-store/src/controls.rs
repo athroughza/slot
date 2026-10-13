@@ -138,36 +138,43 @@ impl Profile {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Bindings([Key; Control::ALL.len()]);
+pub struct Bindings([Option<Key>; Control::ALL.len()]);
 
 impl Default for Bindings {
     fn default() -> Self {
-        Bindings([
-            Key::A,
-            Key::B,
-            Key::L1,
-            Key::R1,
-            Key::Start,
-            Key::Select,
-            Key::X,
-            Key::Y,
-        ])
+        Bindings(
+            [
+                Key::A,
+                Key::B,
+                Key::L1,
+                Key::R1,
+                Key::Start,
+                Key::Select,
+                Key::X,
+                Key::Y,
+            ]
+            .map(Some),
+        )
     }
 }
 
 impl Bindings {
-    pub fn key(&self, control: Control) -> Key {
+    pub fn key(&self, control: Control) -> Option<Key> {
         self.0[control.index()]
     }
 
     pub fn bind(&mut self, control: Control, key: Key) {
-        self.0[control.index()] = key;
+        self.0[control.index()] = Some(key);
+    }
+
+    pub fn unbind(&mut self, control: Control) {
+        self.0[control.index()] = None;
     }
 
     pub fn controls_on(&self, key: Key) -> impl Iterator<Item = Control> + '_ {
         Control::ALL
             .into_iter()
-            .filter(move |c| self.key(*c) == key)
+            .filter(move |c| self.key(*c) == Some(key))
     }
 }
 
@@ -179,17 +186,21 @@ pub(crate) fn bindings_lines(profile: Profile, b: &Bindings) -> String {
                 "bind_{}_{}={}\n",
                 profile.key_name(),
                 c.key_name(),
-                b.key(*c).name().to_ascii_lowercase()
+                b.key(*c).map_or("none", Key::name).to_ascii_lowercase()
             )
         })
         .collect()
 }
 
-pub(crate) fn bind_line(key: &str, value: &str) -> Option<(Profile, Control, Key)> {
+pub(crate) fn bind_line(key: &str, value: &str) -> Option<(Profile, Control, Option<Key>)> {
     let rest = key.strip_prefix("bind_")?;
     let (profile, control) = [Profile::Gba, Profile::Gb]
         .into_iter()
         .find_map(|p| Some((p, rest.strip_prefix(p.key_name())?.strip_prefix('_')?)))?;
     let control = Control::ALL.into_iter().find(|c| c.key_name() == control)?;
-    Some((profile, control, Key::parse(value)?))
+    let key = match value.eq_ignore_ascii_case("none") {
+        true => None,
+        false => Some(Key::parse(value)?),
+    };
+    Some((profile, control, key))
 }

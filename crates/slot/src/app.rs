@@ -904,7 +904,7 @@ impl App {
         !profile
             .controls()
             .iter()
-            .any(|c| key_btn(bindings.key(*c)) == shoulder)
+            .any(|c| bindings.key(*c).map(key_btn) == Some(shoulder))
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -1441,6 +1441,14 @@ impl App {
                 *self.state.controls_mut(profile) = Bindings::default();
                 self.persist();
                 self.hud.toast(Toast::ControlsReset, self.now());
+                at
+            }
+            (false, Action::GbaDown(Btn::X)) => {
+                let Some(&control) = profile.controls().get(at) else {
+                    return;
+                };
+                self.state.controls_mut(profile).unbind(control);
+                self.persist();
                 at
             }
             (false, Action::GbaDown(Btn::A)) => {

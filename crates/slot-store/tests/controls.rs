@@ -14,7 +14,10 @@ fn root() -> tempfile::TempDir {
 #[test]
 fn the_defaults_are_the_buttons_printed_on_the_device() {
     let b = Bindings::default();
-    let pairs: Vec<(Control, Key)> = Control::ALL.iter().map(|c| (*c, b.key(*c))).collect();
+    let pairs: Vec<(Control, Key)> = Control::ALL
+        .iter()
+        .map(|c| (*c, b.key(*c).expect("a default left a control unbound")))
+        .collect();
     assert_eq!(
         pairs,
         [
@@ -38,10 +41,10 @@ fn each_profile_round_trips_apart_from_the_other() {
     s.controls_gb.bind(Control::B, Key::X);
     write_slot_state(d.path(), &s).unwrap();
     let back = read_slot_state(d.path());
-    assert_eq!(back.controls_gba.key(Control::A), Key::R1);
-    assert_eq!(back.controls_gba.key(Control::B), Key::B);
-    assert_eq!(back.controls_gb.key(Control::B), Key::X);
-    assert_eq!(back.controls_gb.key(Control::A), Key::A);
+    assert_eq!(back.controls_gba.key(Control::A), Some(Key::R1));
+    assert_eq!(back.controls_gba.key(Control::B), Some(Key::B));
+    assert_eq!(back.controls_gb.key(Control::B), Some(Key::X));
+    assert_eq!(back.controls_gb.key(Control::A), Some(Key::A));
 }
 
 #[test]
@@ -77,8 +80,8 @@ fn a_binding_slot_cannot_read_keeps_its_default_and_spares_the_rest() {
     .unwrap();
     let s = read_slot_state(d.path());
     assert_eq!(s.volume, 35, "a bad binding threw away the whole state");
-    assert_eq!(s.controls_gba.key(Control::A), Key::A);
-    assert_eq!(s.controls_gba.key(Control::B), Key::Start);
+    assert_eq!(s.controls_gba.key(Control::A), Some(Key::A));
+    assert_eq!(s.controls_gba.key(Control::B), Some(Key::Start));
 }
 
 #[test]
@@ -89,4 +92,17 @@ fn gb_and_gbc_share_a_profile_and_gba_has_its_own() {
     assert!(!Profile::Gb.controls().contains(&Control::L));
     assert!(!Profile::Gb.controls().contains(&Control::R));
     assert_eq!(Profile::Gba.controls().len(), 8);
+}
+
+#[test]
+fn a_control_left_unbound_round_trips_as_none() {
+    let d = root();
+    let mut s = SlotState::default();
+    s.controls_gba.unbind(Control::TurboA);
+    write_slot_state(d.path(), &s).unwrap();
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
+    assert!(text.contains("bind_gba_turbo_a=none\n"), "{text}");
+    let back = read_slot_state(d.path());
+    assert_eq!(back.controls_gba.key(Control::TurboA), None);
+    assert_eq!(back.controls_gba.key(Control::TurboB), Some(Key::Y));
 }

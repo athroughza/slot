@@ -22,10 +22,10 @@ fn legend_tex(i: usize) -> TexId {
 fn faces() -> ControlsFaces {
     ControlsFaces {
         labels: (0..=RESET).map(|i| (label_tex(i), 120, 40)).collect(),
-        keys: (0..=LISTENING)
+        keys: (0..=LISTENING + 1)
             .map(|i| [(key_tex(i, false), 60, 40), (key_tex(i, true), 60, 40)])
             .collect(),
-        legend: [0, 1, 2, 3].map(|i| (legend_tex(i), 90)),
+        legend: [0, 1, 2, 3, 4].map(|i| (legend_tex(i), 90)),
         gb_title: (TexId::from_raw(400), 150, 40),
     }
 }
@@ -96,7 +96,7 @@ fn the_gba_page_scrolls_to_keep_the_bar_in_view() {
 
 fn legend(t: Vec<TexId>) -> Vec<TexId> {
     t.into_iter()
-        .filter(|x| (0..4).map(legend_tex).any(|l| l == *x))
+        .filter(|x| (0..5).map(legend_tex).any(|l| l == *x))
         .collect()
 }
 
@@ -141,9 +141,9 @@ fn listening_asks_for_a_button_and_offers_only_cancel() {
 }
 
 #[test]
-fn the_legend_says_set_on_a_row_and_reset_on_the_reset() {
+fn the_legend_offers_clear_and_set_on_a_row_and_reset_on_the_reset() {
     let at = |row| legend(texes(&drawn(Profile::Gb, Bindings::default(), row, false)));
-    assert_eq!(at(0), [legend_tex(0), legend_tex(1)]);
+    assert_eq!(at(0), [legend_tex(0), legend_tex(4), legend_tex(1)]);
     assert_eq!(at(6), [legend_tex(0), legend_tex(2)]);
 }
 
@@ -165,4 +165,19 @@ fn the_page_is_set_in_the_quick_menus_type() {
         );
         assert!(f.w <= OUT_W);
     }
+}
+
+#[test]
+fn an_unbound_row_reads_none() {
+    let mut b = Bindings::default();
+    b.unbind(Control::TurboB);
+    let t = texes(&drawn(Profile::Gba, b, 7, false));
+    assert!(
+        t.contains(&key_tex(LISTENING + 1, true)),
+        "no \"None\" on the unbound row"
+    );
+    assert!(
+        !t.contains(&key_tex(3, true)),
+        "Y still shows on the unbound row"
+    );
 }

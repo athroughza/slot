@@ -10,6 +10,7 @@ use crate::slot_chrome::{edge, opening};
 pub const CONTROLS_SHOWN: usize = 7;
 pub const RESET_LABEL: &str = "Reset to Default";
 pub const LISTENING_TEXT: &str = "Press a button";
+pub const UNBOUND_TEXT: &str = "None";
 pub const GB_CONTROLS_LABEL: &str = "GB Controls";
 
 pub fn controls_rows(profile: Profile) -> usize {
@@ -37,24 +38,25 @@ pub fn controls_key_faces() -> Vec<[UndoFace; 2]> {
     Key::ALL
         .iter()
         .map(|k| k.name())
-        .chain([LISTENING_TEXT])
+        .chain([LISTENING_TEXT, UNBOUND_TEXT])
         .map(|t| [false, true].map(|lit| quick_value_face(t, lit && t != LISTENING_TEXT)))
         .collect()
 }
 
-pub fn controls_legend_faces() -> [UndoFace; 4] {
+pub fn controls_legend_faces() -> [UndoFace; 5] {
     [
         hint_face("B", "Back"),
         hint_face("A", "Set"),
         hint_face("A", "Reset"),
         hint_face("MENU", "Cancel"),
+        hint_face("X", "Clear"),
     ]
 }
 
 pub struct ControlsFaces {
     pub labels: Vec<(TexId, u32, u32)>,
     pub keys: Vec<[(TexId, u32, u32); 2]>,
-    pub legend: [(TexId, u32); 4],
+    pub legend: [(TexId, u32); 5],
     pub gb_title: (TexId, u32, u32),
 }
 
@@ -114,11 +116,11 @@ impl ControlsMenu<'_> {
                 push(out, tex, right + pad - w as f32, y, w, h);
             }
         }
-        let [back, set, reset, cancel] = faces.legend;
+        let [back, set, reset, cancel, clear] = faces.legend;
         let hints: &[(TexId, u32)] = match (self.listening, self.at == rows - 1) {
             (true, _) => &[cancel],
             (false, true) => &[back, reset],
-            (false, false) => &[back, set],
+            (false, false) => &[back, clear, set],
         };
         for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
             push(out, tex, x, LEGEND_Y, w, HINT_H);
@@ -126,6 +128,9 @@ impl ControlsMenu<'_> {
     }
 }
 
-fn key_at(key: Key) -> usize {
-    Key::ALL.iter().position(|k| *k == key).unwrap_or(0)
+fn key_at(key: Option<Key>) -> usize {
+    match key {
+        Some(key) => Key::ALL.iter().position(|k| *k == key).unwrap_or(0),
+        None => Key::ALL.len() + 1,
+    }
 }
