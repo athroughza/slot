@@ -8,21 +8,23 @@ use slot_input::{Action, Btn, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
-    format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Platform, Shader,
-    SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
-    VOLUME_MAX,
+    format_stamp, read_slot_state, scan, write_slot_state, Bindings, Cart, Core, GbPalette,
+    Platform, Profile, Shader, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX,
+    BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX, VOLUME_MAX,
 };
 use slot_ui::{
-    board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
-    draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
-    Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
-    QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
-    BOARD_W, BOARD_X, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT,
-    SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
+    board_from, board_zoom, controls_rows, draw_backdrop, draw_empty_slot, draw_footer,
+    draw_slot_name, draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at,
+    ClockPicker, ControlsFaces, ControlsMenu, Draw, FfState, GbShell, Hud, HudKind, Icon,
+    LinkBadge, Millis, Placed, Polaroids, PowerChoice, QuickMenu, QuickMenuFaces, QuickRow,
+    QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast, BOARD_W, BOARD_X, CART_W, CHIP_H, CHIP_U,
+    CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT, SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V,
+    SOCKET_W, TURN_PAD,
 };
 
 use crate::audio::Sfx;
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
+use crate::input::{btn_key, key_btn};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
 use crate::link_screen::LinkSprites;
@@ -236,6 +238,11 @@ pub enum Phase {
     QuickMenu {
         row: QuickRow,
     },
+    Controls {
+        profile: Profile,
+        at: usize,
+        listening: bool,
+    },
     Inserting {
         cart: String,
         t: f32,
@@ -316,6 +323,7 @@ pub struct App {
     undo_face: Option<TexId>,
     clock_faces: Option<(TexId, TexId)>,
     quick_menu_faces: Option<QuickMenuFaces>,
+    controls_faces: Option<ControlsFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     sticker_face: Option<TexId>,
     wallpaper: Option<TexId>,
@@ -441,6 +449,7 @@ impl App {
             undo_face: None,
             clock_faces: None,
             quick_menu_faces: None,
+            controls_faces: None,
             quick_clock_faces: None,
             sticker_face: None,
             wallpaper: None,
@@ -660,12 +669,43 @@ impl App {
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => None,
+            QuickRow::DateTime
+            | QuickRow::About
+            | QuickRow::Screen
+            | QuickRow::Game
+            | QuickRow::Controls => None,
         }
     }
 
     pub fn set_quick_menu_faces(&mut self, faces: QuickMenuFaces) {
         self.quick_menu_faces = Some(faces);
+    }
+
+    pub fn set_controls_faces(&mut self, faces: ControlsFaces) {
+        self.controls_faces = Some(faces);
+    }
+
+    pub fn controls_menu(&self) -> Option<(Profile, usize, bool)> {
+        match self.phase {
+            Phase::Controls {
+                profile,
+                at,
+                listening,
+            } => Some((profile, at, listening)),
+            _ => None,
+        }
+    }
+
+    pub fn controls(&self, profile: Profile) -> &Bindings {
+        self.state.controls(profile)
+    }
+
+    fn shelf_profile(&self) -> Profile {
+        Profile::of(
+            self.shelves
+                .get(self.shelf_at)
+                .map_or(Platform::Gba, |s| s.0),
+        )
     }
 
     pub fn set_quick_clock_faces(&mut self, dim: (TexId, u32, u32), lit: (TexId, u32, u32)) {
@@ -851,15 +891,28 @@ impl App {
         video_mode::source_rect(self.platform, self.video_mode)
     }
 
-    fn slot_owns_the_shoulders(&self) -> bool {
-        matches!(self.phase, Phase::Playing { .. }) && self.platform != Platform::Gba
+    pub fn pad_profile(&self) -> (Profile, Bindings) {
+        let profile = Profile::of(self.platform);
+        (profile, *self.state.controls(profile))
+    }
+
+    fn slot_owns(&self, shoulder: Btn) -> bool {
+        if !matches!(self.phase, Phase::Playing { .. }) || self.platform == Platform::Gba {
+            return false;
+        }
+        let (profile, bindings) = self.pad_profile();
+        !profile
+            .controls()
+            .iter()
+            .any(|c| key_btn(bindings.key(*c)) == shoulder)
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
-        if self.slot_owns_the_shoulders() {
-            &[Btn::L1, Btn::R1]
-        } else {
-            &[]
+        match (self.slot_owns(Btn::L1), self.slot_owns(Btn::R1)) {
+            (true, true) => &[Btn::L1, Btn::R1],
+            (true, false) => &[Btn::L1],
+            (false, true) => &[Btn::R1],
+            (false, false) => &[],
         }
     }
 
@@ -1273,10 +1326,10 @@ impl App {
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
-                Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
+                Action::GbaDown(Btn::L1) if self.slot_owns(Btn::L1) => {
                     self.set_picture(VideoMode::Stretch)
                 }
-                Action::GbaDown(Btn::R1) if self.slot_owns_the_shoulders() => {
+                Action::GbaDown(Btn::R1) if self.slot_owns(Btn::R1) => {
                     self.set_picture(VideoMode::Actual)
                 }
                 Action::Eject => self.eject(),
@@ -1303,6 +1356,11 @@ impl App {
                 }
             }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
+            Phase::Controls {
+                profile,
+                at,
+                listening,
+            } => self.controls_input(profile, at, listening, action),
             _ => {}
         }
     }
@@ -1338,6 +1396,13 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::Controls => {
+                self.phase = Phase::Controls {
+                    profile: self.shelf_profile(),
+                    at: 0,
+                    listening: false,
+                }
+            }
             QuickRow::Screen | QuickRow::Game => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
@@ -1354,6 +1419,51 @@ impl App {
             | QuickRow::GbPalettes
             | QuickRow::Rumble => {}
         }
+    }
+
+    fn controls_input(&mut self, profile: Profile, at: usize, listening: bool, action: Action) {
+        let rows = controls_rows(profile);
+        let reset = at == rows - 1;
+        let at = match (listening, action) {
+            (true, Action::QuickMenu) => at,
+            (true, Action::GbaDown(btn)) => {
+                let (Some(key), Some(&control)) = (btn_key(btn), profile.controls().get(at)) else {
+                    return;
+                };
+                self.state.controls_mut(profile).bind(control, key);
+                self.persist();
+                at
+            }
+            (true, _) => return,
+            (false, Action::GbaDown(Btn::Up)) => (at + rows - 1) % rows,
+            (false, Action::GbaDown(Btn::Down)) => (at + 1) % rows,
+            (false, Action::GbaDown(Btn::A)) if reset => {
+                *self.state.controls_mut(profile) = Bindings::default();
+                self.persist();
+                self.hud.toast(Toast::ControlsReset, self.now());
+                at
+            }
+            (false, Action::GbaDown(Btn::A)) => {
+                self.phase = Phase::Controls {
+                    profile,
+                    at,
+                    listening: true,
+                };
+                return;
+            }
+            (false, Action::GbaDown(Btn::B) | Action::QuickMenu) => {
+                self.phase = Phase::QuickMenu {
+                    row: QuickRow::Controls,
+                };
+                return;
+            }
+            (false, _) => return,
+        };
+        self.phase = Phase::Controls {
+            profile,
+            at,
+            listening: false,
+        };
     }
 
     fn change_setting(&mut self, row: QuickRow, right: bool) {
@@ -1390,7 +1500,11 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
+            QuickRow::DateTime
+            | QuickRow::About
+            | QuickRow::Screen
+            | QuickRow::Game
+            | QuickRow::Controls => return,
         }
         self.persist();
     }
@@ -1708,7 +1822,7 @@ impl App {
 
     pub fn frame_split(&self) -> Option<f32> {
         match (&self.phase, self.power_menu) {
-            (Phase::QuickMenu { .. }, None) => Some(slot_ui::QUICK_SPLIT),
+            (Phase::QuickMenu { .. } | Phase::Controls { .. }, None) => Some(slot_ui::QUICK_SPLIT),
             _ => None,
         }
     }
@@ -1996,7 +2110,24 @@ impl App {
                 row: *row,
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
+                controls_label: self
+                    .controls_faces
+                    .as_ref()
+                    .filter(|_| self.shelf_profile() == Profile::Gb)
+                    .map(|f| f.gb_title),
                 faces: self.quick_menu_faces.as_ref(),
+            }
+            .draw(out),
+            Phase::Controls {
+                profile,
+                at,
+                listening,
+            } => ControlsMenu {
+                profile: *profile,
+                bindings: *self.state.controls(*profile),
+                at: *at,
+                listening: *listening,
+                faces: self.controls_faces.as_ref(),
             }
             .draw(out),
             Phase::Shelf => {

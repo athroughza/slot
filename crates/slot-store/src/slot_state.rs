@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::atomic::atomic_write;
+use crate::controls::{bind_line, bindings_lines, Bindings, Profile};
 use crate::gb_palette::GbPalette;
 use crate::platform::Platform;
 
@@ -38,6 +39,8 @@ pub struct SlotState {
     pub rewind: bool,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
+    pub controls_gba: Bindings,
+    pub controls_gb: Bindings,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -110,6 +113,24 @@ impl Default for SlotState {
             rewind: true,
             gb_palettes: false,
             gb_palette: GbPalette::DEFAULT,
+            controls_gba: Bindings::default(),
+            controls_gb: Bindings::default(),
+        }
+    }
+}
+
+impl SlotState {
+    pub fn controls(&self, profile: Profile) -> &Bindings {
+        match profile {
+            Profile::Gba => &self.controls_gba,
+            Profile::Gb => &self.controls_gb,
+        }
+    }
+
+    pub fn controls_mut(&mut self, profile: Profile) -> &mut Bindings {
+        match profile {
+            Profile::Gba => &mut self.controls_gba,
+            Profile::Gb => &mut self.controls_gb,
         }
     }
 }
@@ -127,7 +148,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 }
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
-    let text = format!(
+    let mut text = format!(
         "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
@@ -151,6 +172,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.gb_palettes as u8,
         s.gb_palette.core_name()
     );
+    text.push_str(&bindings_lines(Profile::Gba, &s.controls_gba));
+    text.push_str(&bindings_lines(Profile::Gb, &s.controls_gb));
     atomic_write(&state_path(root), text.as_bytes())
 }
 
@@ -176,6 +199,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rewind = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
+    let mut controls = SlotState::default();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -202,7 +226,11 @@ fn parse(text: &str) -> Option<SlotState> {
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
-            _ => {}
+            _ => {
+                if let Some((profile, control, key)) = bind_line(key, value) {
+                    controls.controls_mut(profile).bind(control, key);
+                }
+            }
         }
     }
     let cart = cart?;
@@ -229,6 +257,8 @@ fn parse(text: &str) -> Option<SlotState> {
         rewind: rewind.unwrap_or(fallback.rewind),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
+        controls_gba: controls.controls_gba,
+        controls_gb: controls.controls_gb,
     })
 }
 

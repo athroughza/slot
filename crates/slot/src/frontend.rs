@@ -8,12 +8,13 @@ use slot_power::{Platform, Power};
 use slot_store::format_stamp;
 use slot_ui::{
     arrows_hint_face, badge_face, bezel_face, cart_shadow, chip_face, chip_shadow_face,
-    date_time_text, gb_cart_shadow, hhmm, hint_face, icon_face, menu_face, photo_face,
-    quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face,
-    rebuild_title_face, set_clock_hint_face, socket_face, sticker_face, title_face, toast_face,
-    wallpaper_face, word_face, CartFace, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces,
+    controls_key_faces, controls_label_faces, controls_legend_faces, date_time_text,
+    gb_cart_shadow, hhmm, hint_face, icon_face, menu_face, photo_face, quick_caret_face,
+    quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face, rebuild_title_face,
+    set_clock_hint_face, socket_face, sticker_face, title_face, toast_face, wallpaper_face,
+    word_face, CartFace, ControlsFaces, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces,
     QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX,
-    HUD_ICON_PX, HUD_INK, LEGEND,
+    GB_CONTROLS_LABEL, HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -242,6 +243,19 @@ impl Frontend {
             .map(|v| v.map(&mut up))
             .collect();
         let carets = faces.quick_carets.map(&mut up);
+        let controls = ControlsFaces {
+            labels: faces.controls_labels.into_iter().map(&mut up).collect(),
+            keys: faces
+                .controls_keys
+                .into_iter()
+                .map(|v| v.map(&mut up))
+                .collect(),
+            legend: faces.controls_legend.map(|f| {
+                let (tex, w, _) = up(f);
+                (tex, w)
+            }),
+            gb_title: up(faces.gb_controls),
+        };
         let legend = faces.quick_legend.map(|f| {
             let (tex, w, _) = up(f);
             (tex, w)
@@ -276,6 +290,7 @@ impl Frontend {
             carets,
             legend,
         });
+        app.set_controls_faces(controls);
         app.set_core_part_faces(sockets, chips, blank, shadow);
         app.set_core_legend_faces(core_legend);
         app.set_link_menu_faces(roles);
@@ -553,6 +568,10 @@ struct UiFaces {
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
     quick_legend: [UndoFace; 3],
+    controls_labels: Vec<UndoFace>,
+    controls_keys: Vec<[UndoFace; 2]>,
+    controls_legend: [UndoFace; 4],
+    gb_controls: UndoFace,
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
     blank_chip: CartFace,
@@ -599,6 +618,10 @@ impl UiFaces {
                 .collect(),
             quick_carets: [false, true].map(quick_caret_face),
             quick_legend: quick_legend_faces(),
+            controls_labels: controls_label_faces(),
+            controls_keys: controls_key_faces(),
+            controls_legend: controls_legend_faces(),
+            gb_controls: quick_value_face(GB_CONTROLS_LABEL, true),
             sockets: slot_store::Core::ALL
                 .iter()
                 .map(|c| socket_face(*c))

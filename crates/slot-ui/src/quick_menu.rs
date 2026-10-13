@@ -20,10 +20,11 @@ pub enum QuickRow {
     Turbo,
     Rewind,
     GbPalettes,
+    Controls,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 14] = [
+    pub const ALL: [QuickRow; 15] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -38,11 +39,13 @@ impl QuickRow {
         QuickRow::Turbo,
         QuickRow::Rewind,
         QuickRow::GbPalettes,
+        QuickRow::Controls,
     ];
 
-    pub const MAIN: [QuickRow; 4] = [
+    pub const MAIN: [QuickRow; 5] = [
         QuickRow::Screen,
         QuickRow::Game,
+        QuickRow::Controls,
         QuickRow::DateTime,
         QuickRow::About,
     ];
@@ -119,13 +122,18 @@ impl QuickRow {
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
             QuickRow::GbPalettes => "GB Palettes",
+            QuickRow::Controls => "GBA Controls",
         }
     }
 
     pub fn opens(self) -> bool {
         matches!(
             self,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game
+            QuickRow::DateTime
+                | QuickRow::About
+                | QuickRow::Screen
+                | QuickRow::Game
+                | QuickRow::Controls
         )
     }
 
@@ -209,11 +217,11 @@ impl QuickValue {
 pub const QUICK_PITCH: f32 = 52.0;
 pub const QUICK_TOP: f32 = (OUT_H as f32 - QUICK_PITCH * QuickRow::MAIN.len() as f32) / 2.0;
 pub const QUICK_EDGE: f32 = 32.0;
-const BAR_INSET: f32 = 4.0;
-const TYPE_DROP: f32 = 4.0;
+pub(crate) const BAR_INSET: f32 = 4.0;
+pub(crate) const TYPE_DROP: f32 = 4.0;
 const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
-const LEGEND_Y: f32 = 427.0;
+pub(crate) const LEGEND_Y: f32 = 427.0;
 pub const QUICK_SPLIT: f32 = LEGEND_Y - 2.0;
 const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
 
@@ -298,6 +306,7 @@ pub struct QuickMenu<'a> {
     pub row: QuickRow,
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
+    pub controls_label: Option<(TexId, u32, u32)>,
     pub faces: Option<&'a QuickMenuFaces>,
 }
 
@@ -324,7 +333,11 @@ impl QuickMenu<'_> {
         for &row in self.row.page() {
             let y = row_top(row) + TYPE_DROP;
             let lit = row == self.row;
-            if let Some(&(tex, w, h)) = faces.labels.get(row.index()) {
+            let label = match row {
+                QuickRow::Controls => self.controls_label,
+                _ => None,
+            };
+            if let Some((tex, w, h)) = label.or_else(|| faces.labels.get(row.index()).copied()) {
                 push(out, tex, QUICK_EDGE - pad, y, w, h);
             }
             let value = match row {
@@ -360,7 +373,7 @@ fn row_top(row: QuickRow) -> f32 {
     top + QUICK_PITCH * row.position() as f32
 }
 
-fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {
+pub(crate) fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {
     out.push(Draw::Tex {
         x: x.round(),
         y: y.round(),

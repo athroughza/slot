@@ -168,6 +168,8 @@ impl Session {
         for btn in self.app.taken_buttons() {
             self.pad.apply(Action::GbaUp(*btn));
         }
+        let (profile, bindings) = self.app.pad_profile();
+        self.pad.bind(profile, bindings);
         if let Some(emu) = &self.emu {
             emu.set_input(self.pad.mask());
         }
